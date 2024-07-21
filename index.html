@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chat with LangChain</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .chat-container {
+            max-width: 600px;
+            margin: auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-top: 50px;
+        }
+        .chat-box {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #ccc;
+            overflow-y: scroll;
+            margin-bottom: 20px;
+            white-space: pre-wrap; /* Ensures white spaces and new lines are preserved */
+        }
+        .input-group {
+            display: flex;
+        }
+        .input-group input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        .input-group button {
+            padding: 10px;
+        }
+        .clear-button {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="chat-container">
+    <div class="chat-box" id="chat-box"></div>
+    <div class="input-group">
+        <input type="text" id="question" placeholder="Type your question here...">
+        <button onclick="sendQuestion()">Send</button>
+        <button class="clear-button" onclick="clearChat()">Clear</button>
+    </div>
+</div>
+
+<script>
+    function appendMessage(role, message) {
+        const chatBox = document.getElementById('chat-box');
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add(role);
+        messageDiv.textContent = message;
+        chatBox.appendChild(messageDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    async function appendStreamedMessage(role, message) {
+        const chatBox = document.getElementById('chat-box');
+        let messageDiv = document.querySelector(`.${role}.streaming`);
+        if (!messageDiv) {
+            messageDiv = document.createElement('div');
+            messageDiv.classList.add(role, 'streaming');
+            chatBox.appendChild(messageDiv);
+        }
+        for (let i = 0; i < message.length; i++) {
+            messageDiv.textContent += message[i];
+            chatBox.scrollTop = chatBox.scrollHeight;
+            await new Promise(resolve => setTimeout(resolve, 50)); // Pause for 0.05 seconds between each character
+        }
+    }
+
+    function sendQuestion() {
+        const questionInput = document.getElementById('question');
+        const question = questionInput.value;
+        if (!question) return;
+        questionInput.value = '';
+
+        appendMessage('user', question);
+
+        const data = {
+            question: question,
+            BASE_URL: 'https://octopai-openai-uk.openai.azure.com',
+            API_KEY: '711a938d66ce4bdfb9fc432a362eb4fb',
+            DEPLOYMENT_NAME: 'Octopai-GPT-4-32K',
+            temperature: 1,
+            db_url: 'hive://localhost:10000/zacay_Prod',
+            role: 'User'
+        };
+
+        fetch('http://192.168.1.141:5000/query', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        }).then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let isFirstChunk = true;
+
+            return new ReadableStream({
+                start(controller) {
+                    async function push() {
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) {
+                                controller.close();
+                                break;
+                            }
+                            const text = decoder.decode(value, { stream: true });
+
+                            // Remove "data: " prefix from the streamed text
+                            const cleanedText = text.replace(/^data: /gm, '');
+                            if (isFirstChunk) {
+                                await appendStreamedMessage('bot', "Answer:\n");
+                                isFirstChunk = false;
+                            }
+                            await appendStreamedMessage('bot', cleanedText);
+                            controller.enqueue(value);
+                        }
+                    }
+                    push();
+                }
+            });
+        }).catch(error => {
+            console.error('Error:', error);
+        });
+    }
+
+    function clearChat() {
+        const chatBox = document.getElementById('chat-box');
+        chatBox.innerHTML = '';
+    }
+</script>
+
+</body>
+</html>
+
