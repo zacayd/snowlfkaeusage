@@ -1,0 +1,9 @@
+Flask
+requests
+SQLAlchemy
+pyhive
+confluent-kafka
+hdfs
+pyarrow
+pandas
+unittest

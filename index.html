@@ -13,6 +13,7 @@
             border: 1px solid #ccc;
             padding: 20px;
             margin-top: 50px;
+            box-sizing: border-box;
         }
         .chat-box {
             width: 100%;
@@ -21,6 +22,15 @@
             overflow-y: scroll;
             margin-bottom: 20px;
             white-space: pre-wrap; /* Ensures white spaces and new lines are preserved */
+            box-sizing: border-box; /* Ensures padding and border are included in the width */
+            padding: 10px; /* Add padding for better text readability */
+            word-break: break-word; /* Allows long words to break and wrap to the next line */
+        }
+        .message {
+            width: 100%;
+            box-sizing: border-box; /* Ensures padding and border are included in the width */
+            margin-bottom: 10px; /* Add some space between messages */
+            word-wrap: break-word; /* Ensures long words break and wrap to the next line */
         }
         .input-group {
             display: flex;
@@ -29,9 +39,11 @@
             flex: 1;
             padding: 10px;
             border: 1px solid #ccc;
+            box-sizing: border-box; /* Ensures padding and border are included in the width */
         }
         .input-group button {
             padding: 10px;
+            box-sizing: border-box; /* Ensures padding and border are included in the width */
         }
         .clear-button {
             margin-left: 10px;
@@ -43,17 +55,24 @@
 <div class="chat-container">
     <div class="chat-box" id="chat-box"></div>
     <div class="input-group">
-        <input type="text" id="question" placeholder="Type your question here...">
-        <button onclick="sendQuestion()">Send</button>
+        <input type="text" id="question" placeholder="Type your question here..." onkeypress="handleKeyPress(event)">
+        <button id="send-button" onclick="sendQuestion()">Send</button>
         <button class="clear-button" onclick="clearChat()">Clear</button>
     </div>
 </div>
 
 <script>
+    function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault(); // Prevents the default action of the enter key
+            document.getElementById('send-button').click();
+        }
+    }
+
     function appendMessage(role, message) {
         const chatBox = document.getElementById('chat-box');
         const messageDiv = document.createElement('div');
-        messageDiv.classList.add(role);
+        messageDiv.classList.add('message', role);
         messageDiv.textContent = message;
         chatBox.appendChild(messageDiv);
         chatBox.scrollTop = chatBox.scrollHeight;
@@ -64,14 +83,15 @@
         let messageDiv = document.querySelector(`.${role}.streaming`);
         if (!messageDiv) {
             messageDiv = document.createElement('div');
-            messageDiv.classList.add(role, 'streaming');
+            messageDiv.classList.add('message', role, 'streaming');
             chatBox.appendChild(messageDiv);
         }
         for (let i = 0; i < message.length; i++) {
             messageDiv.textContent += message[i];
             chatBox.scrollTop = chatBox.scrollHeight;
-            await new Promise(resolve => setTimeout(resolve, 50)); // Pause for 0.05 seconds between each character
+            await new Promise(resolve => setTimeout(resolve, 5)); // Pause for 0.005 seconds between each character
         }
+        messageDiv.classList.remove('streaming'); // Remove the streaming class once the message is fully appended
     }
 
     function sendQuestion() {
@@ -144,4 +164,3 @@
 
 </body>
 </html>
-
