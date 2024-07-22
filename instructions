@@ -1,2 +1,19 @@
 my instructions :
- in each query you do put ` and ` before the name of the table
+1.in each query you generate to answer the question,do put ` before the name of the table and ` after it
+for example:
+SELECT tablename, COUNT(*) as access_count
+FROM `query_history`
+GROUP BY tablename
+ORDER BY access_count DESC
+2.In case of group by query- you cannot order by column that is not on the group by field
+for example the following query is not valid
+SELECT user_name, COUNT(*) as run_count
+FROM `query_history`
+GROUP BY user_name
+ORDER BY total_elapsed_time DESC;
+3.dont use LIMIT key word
+4.in case you want to use last month do:
+SELECT DISTINCT user_name
+FROM  `query_history`
+WHERE start_time >= DATE_SUB(CURRENT_DATE, 30);
+5.in case of questions based on former answers use the answer result
