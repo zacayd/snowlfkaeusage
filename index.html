@@ -48,6 +48,10 @@
         .clear-button {
             margin-left: 10px;
         }
+        .typing-indicator {
+            font-style: italic;
+            color: #aaa;
+        }
     </style>
 </head>
 <body>
@@ -62,6 +66,8 @@
 </div>
 
 <script>
+    let typingInterval;
+
     function handleKeyPress(event) {
         if (event.key === 'Enter') {
             event.preventDefault(); // Prevents the default action of the enter key
@@ -94,6 +100,32 @@
         messageDiv.classList.remove('streaming'); // Remove the streaming class once the message is fully appended
     }
 
+    function startTypingIndicator() {
+        const chatBox = document.getElementById('chat-box');
+        const typingDiv = document.createElement('div');
+        typingDiv.classList.add('message', 'typing-indicator');
+        typingDiv.textContent = 'bot is typing';
+        chatBox.appendChild(typingDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        let dots = '';
+        typingInterval = setInterval(() => {
+            dots += '.';
+            if (dots.length > 3) {
+                dots = '';
+            }
+            typingDiv.textContent = 'bot is typing' + dots;
+        }, 500);
+    }
+
+    function stopTypingIndicator() {
+        clearInterval(typingInterval);
+        const typingDiv = document.querySelector('.typing-indicator');
+        if (typingDiv) {
+            typingDiv.remove();
+        }
+    }
+
     function sendQuestion() {
         const questionInput = document.getElementById('question');
         const question = questionInput.value;
@@ -101,6 +133,7 @@
         questionInput.value = '';
 
         appendMessage('user', question);
+        startTypingIndicator(); // Start the typing indicator
 
         const data = {
             question: question,
@@ -112,7 +145,7 @@
             role: 'User'
         };
 
-        fetch('http://192.168.1.141:5000/query', {
+        fetch('http://192.168.1.220:5000/query', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -134,6 +167,7 @@
                             const { done, value } = await reader.read();
                             if (done) {
                                 controller.close();
+                                stopTypingIndicator(); // Stop the typing indicator
                                 break;
                             }
                             const text = decoder.decode(value, { stream: true });
@@ -141,7 +175,7 @@
                             // Remove "data: " prefix from the streamed text
                             const cleanedText = text.replace(/^data: /gm, '');
                             if (isFirstChunk) {
-                                await appendStreamedMessage('bot', "Answer:\n");
+                                await appendStreamedMessage('bot', "Bot Answer:\n");
                                 isFirstChunk = false;
                             }
                             await appendStreamedMessage('bot', cleanedText);
@@ -153,6 +187,7 @@
             });
         }).catch(error => {
             console.error('Error:', error);
+            stopTypingIndicator(); // Stop the typing indicator in case of error
         });
     }
 

@@ -5,6 +5,8 @@ from langchain.chat_models import AzureChatOpenAI
 from langchain_experimental.sql import SQLDatabaseChain
 from sqlalchemy import create_engine
 from langchain_community.utilities.sql_database import SQLDatabase
+
+
 import time
 from Logger import Logger
 
@@ -17,13 +19,17 @@ log = Logger('AppLogger')  # Custom Logger instance
 
 # Global variable to maintain context
 conversation_context = []
+message_text = []
 
-def stream_response(questionTxt, chain, max_retries=2, delay=2):
+
+def stream_response(questionTxt, chain, max_retries=10, delay=2):
     buffer = ""
     attempt = 0
     while attempt < max_retries:
         try:
-            for response in chain.run(questionTxt):
+            resp=chain.run(questionTxt)
+            log.info(resp)
+            for response in resp:
                 buffer += response
                 if len(buffer) > 50 or '\n' in buffer:
                     yield f"data: {buffer}\n\n"
@@ -35,9 +41,11 @@ def stream_response(questionTxt, chain, max_retries=2, delay=2):
             break  # If successful, exit the retry loop
         except Exception as e:
             attempt += 1
-            logging.error(f"Attempt {attempt} failed with error: {e}")
+            log.error(f"Attempt {attempt} failed with error: {e}")
             if attempt >= max_retries:
+
                 yield f"data: Error processing query after {max_retries} attempts.\n\n"
+
                 break
             time.sleep(delay)
 
@@ -48,7 +56,7 @@ def retry(func, delay=2):
             attempt += 1
             return func()
         except Exception as e:
-            logging.error(f"Attempt {attempt} failed with error: {e}")
+            log.error(f"Attempt {attempt} failed with error: {e}")
             time.sleep(delay)
 
 @app.route('/query', methods=['POST'])
@@ -64,7 +72,7 @@ def query():
         db_url = data.get('db_url')
         role = data.get('role')
 
-        logging.debug(f"Received request with question: {question}, db_url: {db_url}")
+        log.debug(f"Received request with question: {question}, db_url: {db_url}")
         log.info(f"Received request with question: {question}, db_url: {db_url}")
 
         azure_chat_model = AzureChatOpenAI(
@@ -76,13 +84,16 @@ def query():
             temperature=temperature
         )
 
+
+
         try:
+
             engine = retry(lambda: create_engine(db_url))
             db = retry(lambda: SQLDatabase.from_uri(db_url))
-            logging.debug("Database connection established successfully.")
+            log.debug("Database connection established successfully.")
             log.info("Database connection established successfully.")
         except Exception as e:
-            logging.error(f"Database connection failed: {e}")
+            log.error(f"Database connection failed: {e}")
             log.error(f"Database connection failed: {e}")
             return jsonify({'error': 'Database connection failed', 'details': str(e)}), 500
 
@@ -91,27 +102,27 @@ def query():
         try:
             with open('instructions', 'r') as f:
                 instructions = f.read()
-            logging.debug("Instructions read successfully.")
+            log.debug("Instructions read successfully.")
             log.info("Instructions read successfully.")
         except Exception as e:
-            logging.error(f"Failed to read instructions: {e}")
+            log.error(f"Failed to read instructions: {e}")
             log.error(f"Failed to read instructions: {e}")
             return jsonify({'error': 'Failed to read instructions', 'details': str(e)}), 500
 
         try:
             # Append the new question to the conversation context
             conversation_context.append({"role": role, "content": question + '\n' + instructions})
-            logging.debug(f"Formatted question: {conversation_context}")
+            log.debug(f"Formatted question: {conversation_context}")
             log.info(f"Formatted question: {conversation_context}")
 
             return Response(stream_response(conversation_context, chain), content_type='text/event-stream')
         except Exception as e:
-            logging.error(f"Query processing failed: {e}")
+            log.error(f"Query processing failed: {e}")
             log.error(f"Query processing failed: {e}")
             return jsonify({'error': 'Query processing failed', 'details': str(e)}), 500
 
     except Exception as e:
-        logging.error(f"Unhandled exception: {e}")
+        log.error(f"Unhandled exception: {e}")
         log.error(f"Unhandled exception: {e}")
         return jsonify({'error': 'Unhandled exception', 'details': str(e)}), 500
 

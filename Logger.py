@@ -29,7 +29,6 @@ class Logger:
         # self.logger.addHandler(file_handler)
 
         if not self.logger.handlers:
-            # self.logger.addHandler(console_handler)
             self.logger.addHandler(file_handler)
             self.logger.addHandler(stream_handler)
         #     # self.logger.addHandler(handlerRotator)
