@@ -28,6 +28,8 @@ class RedisManager:
     def __init__(self, redis_host, redis_port, db_url):
         self.client = redis.StrictRedis(host=redis_host, port=redis_port, decode_responses=True)
         self.db_url_hash = hashlib.md5(db_url.encode()).hexdigest()
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+        self.log = Logger('RedisManager')
 
     def get_key(self, key):
         return f"{self.db_url_hash}:{key}"
@@ -39,33 +41,35 @@ class RedisManager:
         try:
             if isinstance(value, dict) and 'conv' in value and isinstance(value['conv'], list):
                 # Extract the 'content' value from each object in the list
-                content_list = [item.content for item in value['conv']]
+                content_list = [item for item in value['conv']]
                 # Convert the list of contents to a JSON string
-                value['conv'] = json.dumps(content_list)
-            self.client.set(self.get_key(key), value)
+                value['conv'] = content_list
+            self.client.set(self.get_key(key), json.dumps(value))
         except Exception as e:
-            print(e)
+            self.log.error(e)
     def clear_cache(self):
         self.client.flushdb()
 
-    def get_conversation_context_conversation(self):
-        return json.loads(self.get(self.get_key("conversation")) or '{}')
+    def get_conversation_context_conversation(self,messagetype):
+        return json.loads(self.get(self.get_key(messagetype)) or '{}')
 
-    def save_conversation_context_conversation(self, context):
+    def save_conversation_context_conversation(self, context,messagetype):
         try:
             if isinstance(context, list):
                 # Save list directly without json.dumps
-                self.set(self.get_key("conversation"), {"conv":context})
+                self.set(self.get_key(messagetype), {messagetype:context})
             else:
                 # For other types, save as JSON string
-                self.set(self.get_key("conversation"), json.dumps(context))
+                self.set(self.get_key(messagetype), json.dumps(context))
         except Exception as e:
-            print(e)
+            self.log.error(e)
 
 class HiveManager:
     def __init__(self, db_url, logger):
         self.db_url = db_url
         self.log = logger
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+        self.log = Logger('HiveManager')
 
     def save_to_hive(self, question, input_tokens, output_tokens, total_tokens, cost):
         try:
@@ -105,16 +109,18 @@ class QueryProcessor:
         self.hive_manager = hive_manager
         self.log = logger
         self.memory = memory
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
+        self.log = Logger('QueryProcessor')
 
     def load_conversation_from_redis(self,agentChain):
         # Load conversation context from Redis and update the memory
-        conversation_context = self.redis_manager.get_conversation_context_conversation()
+        conversation_context = self.redis_manager.get_conversation_context_conversation("conversation")
         self.memory.chat_memory.messages = conversation_context
         agentChain.memory.chat_memory.messages=conversation_context
 
     def save_conversation_to_redis(self,chat_history):
 
-        self.redis_manager.save_conversation_context_conversation(chat_history)
+        self.redis_manager.save_conversation_context_conversation(chat_history,"conversation")
 
     def stream_response(self, question, chain, max_retries=3, delay=2):
         buffer = ""
@@ -152,7 +158,9 @@ class QueryProcessor:
 
                         # After running the chain, update the Redis with the latest messages
                         chat_hist=chain.memory.chat_memory.messages
-                        self.save_conversation_to_redis(chat_hist)
+                        content_list = [item.content for item in chat_hist]
+
+                        self.save_conversation_to_redis(content_list)
 
 
                         output_tokens = cb.completion_tokens
@@ -165,7 +173,7 @@ class QueryProcessor:
 
 
                     resp = f'{resp}\n Tokens: {total_tokens}, Total cost: {cost} $'
-                    self.hive_manager.save_to_hive(question, input_tokens, output_tokens, total_tokens, cost)
+
 
                     for response in resp:
                         buffer += response
@@ -175,6 +183,9 @@ class QueryProcessor:
                     if buffer:
                         yield f"data: {buffer}\n\n"
                     break
+                    self.log.info("save to table")
+                    self.hive_manager.save_to_hive(question, input_tokens, output_tokens, total_tokens, cost)
+
                 except Exception as e:
                     self.log.error(e)
                     attempt += 1
@@ -192,10 +203,12 @@ class App:
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s %(levelname)s %(message)s')
         self.log = Logger('AppLogger')
 
+
         with open('config.json', 'r') as f:
             self.config = json.load(f)
 
         self.redis_manager = RedisManager(self.config.get('REDIS_HOST', 'localhost'), self.config.get('REDIS_PORT', 6379), self.config.get('db_url'))
+        self.clear_cache_on_startup()
         self.hive_manager = HiveManager(self.config.get('db_url'), self.log)
         self.query_processor = QueryProcessor(self.config, self.redis_manager, self.hive_manager, self.log,ConversationBufferMemory(memory_key="chat_history"))
 
@@ -266,6 +279,12 @@ class App:
         # self.query_processor.load_conversation_from_redis(self.agent_chain)
         self.setup_routes()
 
+    def clear_cache_on_startup(self):
+        try:
+            self.redis_manager.clear_cache()
+            self.log.info("Redis cache cleared on startup.")
+        except Exception as e:
+            self.log.error(f"Failed to clear cache on startup: {e}")
     def setup_routes(self):
         @self.app.route('/query', methods=['POST'])
         def query():
@@ -285,18 +304,29 @@ class App:
                     return jsonify({'error': 'Failed to read instructions', 'details': str(e)}), 500
 
                 try:
-                    conversation_context = self.redis_manager.get_conversation_context_conversation()
+                    conversation_context = self.redis_manager.get_conversation_context_conversation("messages")
+                    convDict = json.loads(conversation_context) if isinstance(conversation_context, str) else conversation_context
 
-                    if len(conversation_context)>0 and   any(instructions in message['content'] for message in conversation_context["conversation"]):
-                        conversation_context["conversation"].append(
-                            {"role": self.config['role'], "content": question})
+                    if (len(convDict)>0):
+                        try:
+                            lst=[message['content'] for message in convDict["messages"]]
+                        except Exception as e:
+                            self.log.error(e)
+
+
+
+                    if len(convDict)>0 :
+                        exists = any(instructions in item for item in lst)
+                        if exists:
+                            convDict["messages"].append(
+                                {"role": self.config['role'], "content": question})
                     else:
-                        conversation_context["conversation"]=[]
-                        conversation_context["conversation"].append({"role": self.config['role'], "content": question + '\n' + instructions})
+                        convDict["messages"]=[]
+                        convDict["messages"].append({"role": self.config['role'], "content": question + '\n' + instructions})
                         question=question + '\n' + instructions
 
 
-                    self.redis_manager.save_conversation_context_conversation(conversation_context)
+                    self.redis_manager.save_conversation_context_conversation(conversation_context,"messages")
 
                     self.log.info(f"Formatted question: {conversation_context}")
 
