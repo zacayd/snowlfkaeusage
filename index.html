@@ -8,16 +8,19 @@
             font-family: Arial, sans-serif;
         }
         .chat-container {
-            max-width: 600px;
+            width: 1200px; /* Doubled the width */
+            height: 800px; /* 2/3 of 1200px */
             margin: auto;
             border: 1px solid #ccc;
             padding: 20px;
             margin-top: 50px;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column; /* Ensures input group stays at the bottom */
         }
         .chat-box {
             width: 100%;
-            height: 300px;
+            height: 600px; /* 2/3 of 900px */
             border: 1px solid #ccc;
             overflow-y: scroll;
             margin-bottom: 20px;
@@ -25,12 +28,16 @@
             box-sizing: border-box; /* Ensures padding and border are included in the width */
             padding: 10px; /* Add padding for better text readability */
             word-break: break-word; /* Allows long words to break and wrap to the next line */
+            flex: 1; /* Ensures chat box takes up available space */
         }
         .message {
             width: 100%;
             box-sizing: border-box; /* Ensures padding and border are included in the width */
             margin-bottom: 10px; /* Add some space between messages */
             word-wrap: break-word; /* Ensures long words break and wrap to the next line */
+            padding: 5px; /* Optional: Add padding to messages for better readability */
+            background-color: #f9f9f9; /* Optional: Add background color to messages */
+            border-radius: 5px; /* Optional: Add border radius to messages */
         }
         .input-group {
             display: flex;
@@ -136,13 +143,13 @@
         startTypingIndicator(); // Start the typing indicator
 
         const data = {
-            question: question,
-            BASE_URL: 'https://octopai-openai-uk.openai.azure.com',
-            API_KEY: '711a938d66ce4bdfb9fc432a362eb4fb',
-            DEPLOYMENT_NAME: 'Octopai-GPT-4-32K',
-            temperature: 0.2,
-            db_url: 'hive://localhost:10000/zacay_Prod',
-            role: 'User'
+            question: question
+            // BASE_URL: 'https://octopai-openai-uk.openai.azure.com',
+            // API_KEY: '711a938d66ce4bdfb9fc432a362eb4fb',
+            // DEPLOYMENT_NAME: 'Octopai-GPT-4-32K',
+            // temperature: 0.2,
+            // db_url: 'hive://localhost:10000/zacay_Prod',
+            // role: 'User'
         };
 
         fetch('http://192.168.1.220:5000/query', {

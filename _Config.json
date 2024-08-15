@@ -24,10 +24,11 @@
         "VIEWS": 100,
         "PROCEDURES": 100
     },
-    "BASE_URL": "https://octopai-gpt4-sweden.openai.azure.com",
+
+     "BASE_URL": "https://octopai-gpt4-sweden.openai.azure.com",
      "API_KEY": "40f812aef7ef452797683860e674aaf1",
      "DEPLOYMENT_NAME": "octopai-sweden-gpt-4",
-     "temperature": 0.9,
+     "temperature": 0.2,
      "db_url": "hive://localhost:10000/zacay_Prod",
      "role": "User",
     "REDIS_HOST": "localhost",

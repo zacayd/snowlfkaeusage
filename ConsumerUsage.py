@@ -858,8 +858,14 @@ class ConsumerUsage:
                     load_data_query = f"truncate table  {table_name}_TMP"
                     cursor.execute(load_data_query)
                     self.log.info(f"Loaded data from {hdfs_path} into Hive table {table_name}_TMP partition ({dateField}='{partition_date_str}')")
-                else:
-                    load_data_query = f'UPDATE {table_name} SET END_TIME="{json_dict["event_time_"]}" WHERE object_id="{json_dict["object_id"]}"'
+
+                    if json_dict["event_time_"]<json_dict["start_time"]:
+                        v_endtime= datetime.now.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                    else:
+                        v_endtime=json_dict["event_time_"]
+
+
+                    load_data_query = f'UPDATE {table_name} SET END_TIME="{v_endtime}" WHERE object_id="{json_dict["object_id"]}"'
                     cursor.execute(load_data_query)
                     self.log.info(f"Update end_date")
             except Exception as e:

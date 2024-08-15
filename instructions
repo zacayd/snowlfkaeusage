@@ -1,6 +1,16 @@
-
 my instructions :
-1.in order to search for cases where a view was changed and by that the duration run of it got longer run this query:
+1.Dont start the query you generate with ```sql
+2.Each query you generate must not end with ;
+for example: SELECT batchtext, MAX(UNIX_TIMESTAMP(end_time) - UNIX_TIMESTAMP(start_time_)) AS max_duration_seconds FROM `query_history` GROUP BY batchtext ORDER BY max_duration_seconds DESC LIMIT 5
+
+3.In order to know query duration use:
+    SELECT batchtext, MAX(UNIX_TIMESTAMP(end_time) - UNIX_TIMESTAMP(start_time_)) AS max_duration_seconds
+    FROM query_history
+    GROUP BY batchtext
+    ORDER BY max_duration_seconds DESC
+    LIMIT 5;
+
+4.in order to search for cases where a view was changed and by that the duration run of it got longer run this query:
 WITH query_with_duration AS (
     SELECT *,
            UNIX_TIMESTAMP(end_time) - UNIX_TIMESTAMP(start_time_) AS duration_seconds
@@ -39,24 +49,27 @@ SELECT *,
        LEAD(view_definition) OVER (PARTITION BY db, schemaname, tablename ORDER BY start_time_) AS next_view_definition
 FROM joined_query
 WHERE UPPER(TRIM(tablename)) = UPPER(TRIM(view_name))
-)a where a.next_view_definition is not NULL
-1.in each query you generate to answer the question,do put ` before the name of the table and ` after it
+)a where a.next_view_definition is not NULL and a.next_view_definition<>a.view_definition
+5.in each query you generate to answer the question,do put ` before the name of the table and ` after it
 for example:
 SELECT tablename, COUNT(*) as access_count
 FROM `query_history`
 GROUP BY tablename
 ORDER BY access_count DESC
-2.in case of questions based on former answers use the answer result
-3.In case of group by query- you cannot order by column that is not on the group by field
+6.in case of questions based on former answers use the answer result
+7.In case of group by query- you cannot order by column that is not on the group by field
 for example the following query is not valid
 SELECT user_name, COUNT(*) as run_count
 FROM `query_history`
 GROUP BY user_name
 ORDER BY total_elapsed_time DESC;
-4.dont use LIMIT key word
-5.in case you want to use last month do:
-SELECT DISTINCT user_name
-FROM  `query_history`
-WHERE start_time >= DATE_SUB(CURRENT_DATE, 30);
-5.how to make diff between 2 dates UNIX_TIMESTAMP(end_time) - UNIX_TIMESTAMP(start_time) AS diff_seconds,
-6.for each calculation use start_time_ and not start_time
+8.dont use LIMIT key word
+9.In order to know which user run most queries in last month:
+    SELECT username, COUNT(*) as query_count
+    FROM `query_history`
+    WHERE start_time_ >= DATE_SUB(CURRENT_DATE, 30)
+    GROUP BY username
+    order by query_count desc
+
+10.how to make diff between 2 dates UNIX_TIMESTAMP(end_time) - UNIX_TIMESTAMP(start_time) AS diff_miliseconds,
+11.for each calculation use start_time_ and not start_time

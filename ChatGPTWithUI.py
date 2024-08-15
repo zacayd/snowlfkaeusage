@@ -22,7 +22,7 @@ conversation_context = []
 message_text = []
 
 
-def stream_response(questionTxt, chain, max_retries=10, delay=2):
+def stream_response(questionTxt, chain, max_retries=3, delay=2):
     buffer = ""
     attempt = 0
     while attempt < max_retries:
@@ -31,7 +31,7 @@ def stream_response(questionTxt, chain, max_retries=10, delay=2):
             log.info(resp)
             for response in resp:
                 buffer += response
-                if len(buffer) > 50 or '\n' in buffer:
+                if len(buffer) > 500 or '\n' in buffer:
                     yield f"data: {buffer}\n\n"
                     buffer = ""
                 # Append response to conversation context for context management
