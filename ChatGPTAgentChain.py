@@ -122,10 +122,13 @@ class QueryProcessor:
 
         self.redis_manager.save_conversation_context_conversation(chat_history,"conversation")
 
-    def stream_response(self, question, chain, max_retries=3, delay=2):
+    def stream_response(self, question,origquestion, chain, max_retries=3, delay=2):
         buffer = ""
         attempt = 0
-        question_hash = hashlib.md5(question.encode()).hexdigest()
+
+
+
+        question_hash = hashlib.md5(origquestion.encode()).hexdigest()
         input_tokens, total_tokens, cost = 0, 0, 0
 
         while attempt < max_retries:
@@ -154,6 +157,7 @@ class QueryProcessor:
                         try:
                             resp = chain.run(question)
                         except Exception as e:
+                            resp=''
                             self.log.error(e)
 
                         # After running the chain, update the Redis with the latest messages
@@ -306,6 +310,8 @@ class App:
                 try:
                     conversation_context = self.redis_manager.get_conversation_context_conversation("messages")
                     convDict = json.loads(conversation_context) if isinstance(conversation_context, str) else conversation_context
+                    convDict = json.loads(convDict) if isinstance(convDict,
+                                                                              str) else convDict
 
                     if (len(convDict)>0):
                         try:
@@ -320,17 +326,22 @@ class App:
                         if exists:
                             convDict["messages"].append(
                                 {"role": self.config['role'], "content": question})
+                            origquestion=question
+
                     else:
                         convDict["messages"]=[]
                         convDict["messages"].append({"role": self.config['role'], "content": question + '\n' + instructions})
+                        origquestion = question
                         question=question + '\n' + instructions
+
+
 
 
                     self.redis_manager.save_conversation_context_conversation(conversation_context,"messages")
 
                     self.log.info(f"Formatted question: {conversation_context}")
 
-                    return Response(self.query_processor.stream_response(question,self.agent_chain),
+                    return Response(self.query_processor.stream_response(question,origquestion,self.agent_chain),
                                     content_type='text/event-stream')
                 except Exception as e:
                     self.log.error(f"Query processing failed: {e}")
