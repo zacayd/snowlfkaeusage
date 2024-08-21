@@ -122,13 +122,13 @@ class QueryProcessor:
 
         self.redis_manager.save_conversation_context_conversation(chat_history,"conversation")
 
-    def stream_response(self, question,origquestion, chain, max_retries=3, delay=2):
+    def stream_response(self, question, chain, max_retries=3, delay=2):
         buffer = ""
         attempt = 0
 
 
 
-        question_hash = hashlib.md5(origquestion.encode()).hexdigest()
+        question_hash = hashlib.md5(question.encode()).hexdigest()
         input_tokens, total_tokens, cost = 0, 0, 0
 
         while attempt < max_retries:
@@ -143,16 +143,7 @@ class QueryProcessor:
                         resp = cached_response
                         output_tokens, input_tokens, total_tokens, cost = 0, 0, 0, 0
                     else:
-                        # prompt_query = """
-                        #     Given an input question, first create a syntactically correct query to run,
-                        #     then look at the results of the query and return the answer.
-                        #     Here is the format to follow:
-                        #     Answer: Final answer here
-                        #     SQLQuery: SQL Query to run
-                        #     {question}
-                        # """
-                        # query = prompt_query.format(question=question)
-                        # self.load_conversation_from_redis(chain) dont know why it fails on run when you add to the memory the values
+
 
                         try:
                             resp = chain.run(question)
@@ -170,13 +161,14 @@ class QueryProcessor:
                         output_tokens = cb.completion_tokens
                         input_tokens = cb.prompt_tokens
                         total_tokens = cb.total_tokens
+
                         cost = cb.total_cost
 
                     self.log.info(resp)
                     self.redis_manager.set(question_hash, resp)
 
 
-                    resp = f'{resp}\n Tokens: {total_tokens}, Total cost: {cost} $'
+                    resp = f'{resp}\n Total Tokens: {total_tokens},prompt tokens:{input_tokens},output tokens:{output_tokens}, Total cost: {cost} $'
 
 
                     for response in resp:
@@ -228,6 +220,15 @@ class App:
 
         self.memory = ConversationBufferMemory(memory_key="chat_history")
         self.query_processor = QueryProcessor(self.config, self.redis_manager, self.hive_manager, self.log, self.memory)
+        # Read instructions
+        try:
+            with open('instructions', 'r') as f:
+                self.instructions = f.read().strip()
+            self.log.info("Instructions read successfully.")
+        except Exception as e:
+            self.log.error(f"Failed to read instructions: {e}")
+            raise
+
 
         try:
             self.engine = self.retry(lambda: create_engine(self.config['db_url']))
@@ -239,6 +240,7 @@ class App:
             raise
 
         self.chain = SQLDatabaseChain.from_llm(self.azure_chat_model, db=self.db, verbose=True)
+
 
         self.template = """This is a conversation between a human and a bot:
 
@@ -259,7 +261,11 @@ class App:
             ),
         ]
 
-        self.prefix = """Have a conversation with a human, answering the following questions as best you can. You have access to the following tools:"""
+        self.prefix = f"""You are a helpful assistant. Follow these instructions carefully:
+        {self.instructions}You have access to the following tools:"""
+
+
+        # self.prefix = """Have a conversation with a human, answering the following questions as best you can. You have access to the following tools:"""
         self.suffix = """Begin!"
 
         {chat_history}
@@ -298,41 +304,19 @@ class App:
 
                 self.log.debug(f"Received request with question: {question}, db_url: {self.config['db_url']}")
                 self.log.info(f"Received request with question: {question}, db_url: {self.config['db_url']}")
-
-                try:
-                    with open('instructions', 'r') as f:
-                        instructions = f.read()
-                    self.log.info("Instructions read successfully.")
-                except Exception as e:
-                    self.log.error(f"Failed to read instructions: {e}")
-                    return jsonify({'error': 'Failed to read instructions', 'details': str(e)}), 500
-
                 try:
                     conversation_context = self.redis_manager.get_conversation_context_conversation("messages")
                     convDict = json.loads(conversation_context) if isinstance(conversation_context, str) else conversation_context
-                    convDict = json.loads(convDict) if isinstance(convDict,
-                                                                              str) else convDict
-
-                    if (len(convDict)>0):
-                        try:
-                            lst=[message['content'] for message in convDict["messages"]]
-                        except Exception as e:
-                            self.log.error(e)
-
+                    convDict = json.loads(convDict) if isinstance(convDict, str) else convDict
 
 
                     if len(convDict)>0 :
-                        exists = any(instructions in item for item in lst)
-                        if exists:
-                            convDict["messages"].append(
+                        convDict["messages"].append(
                                 {"role": self.config['role'], "content": question})
-                            origquestion=question
-
                     else:
                         convDict["messages"]=[]
-                        convDict["messages"].append({"role": self.config['role'], "content": question + '\n' + instructions})
-                        origquestion = question
-                        question=question + '\n' + instructions
+                        convDict["messages"].append({"role": self.config['role'], "content": question })
+
 
 
 
@@ -341,7 +325,7 @@ class App:
 
                     self.log.info(f"Formatted question: {conversation_context}")
 
-                    return Response(self.query_processor.stream_response(question,origquestion,self.agent_chain),
+                    return Response(self.query_processor.stream_response(question,self.agent_chain),
                                     content_type='text/event-stream')
                 except Exception as e:
                     self.log.error(f"Query processing failed: {e}")
